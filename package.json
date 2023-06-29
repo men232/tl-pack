@@ -1,5 +1,5 @@
 {
-	"name": "tl-pack",
+	"name": "@andrew_l/tl-pack",
 	"version": "0.0.1",
 	"description": "",
 	"type": "module",
@@ -11,7 +11,9 @@
 	"author": "Andrew L.",
 	"license": "ISC",
 	"types": "./dist",
-	"files": ["dist/**"],
+	"files": [
+		"dist/**"
+	],
 	"exports": {
 		".": {
 			"import": "./dist/index.js",
