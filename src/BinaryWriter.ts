@@ -1,4 +1,5 @@
 import { CORE_TYPES } from './constants.js';
+import { TLExtension } from './extension.js';
 import { coreType, serializeBytes } from './helpers.js';
 
 const hasNodeBuffer = typeof Buffer !== 'undefined';
@@ -25,16 +26,27 @@ function byteArrayAllocate(length: number) {
 	return new Uint8Array(length);
 }
 
+export interface BinaryWriterOptions {
+	extensions?: TLExtension[];
+}
+
 export class BinaryWriter {
 	private target: Buffer | Uint8Array;
 	private targetView: DataView;
 	private dict: Map<string, number>;
+	private extensions: Map<number, TLExtension>;
 	offset: number;
 
-	constructor() {
-		this.target = Buffer.alloc(0);
+	constructor(options?: BinaryWriterOptions) {
 		this.dict = new Map();
 		this.offset = 0;
+		this.extensions = new Map();
+
+		if (options && options.extensions) {
+			options.extensions.forEach((ext) => {
+				this.extensions.set(ext.token, ext);
+			});
+		}
 
 		this.target = byteArrayAllocate(8192);
 		this.targetView = new DataView(this.target.buffer, 0, this.target.length);
@@ -185,9 +197,6 @@ export class BinaryWriter {
 		}
 
 		this.offset += bytes;
-
-		// this.target.set(bytes, this.offset);
-		// this.offset += bytes.length;
 	}
 
 	writeBytes(value: Buffer | Uint8Array) {
@@ -218,12 +227,18 @@ export class BinaryWriter {
 		this.writeLength(length);
 
 		for (let i = 0; i < length; i++) {
-			this.writeObject(value[i]);
+			if (value[i] === undefined) {
+				this.writeNull();
+			} else {
+				this.writeObject(value[i]);
+			}
 		}
 	}
 
 	writeMap(object: Record<string, any>) {
 		for (const key in object) {
+			if (object[key] === undefined) continue;
+
 			this.wireDictionary(key);
 			this.writeObject(object[key]);
 		}
@@ -234,13 +249,11 @@ export class BinaryWriter {
 	wireDictionary(value: string) {
 		if (this.dict.has(value)) {
 			const idx = this.dict.get(value)!;
-			this.writeByte(CORE_TYPES.DictIndex);
-			this.writeLength(idx);
+			this.writeCore(CORE_TYPES.DictIndex, idx);
 		} else {
 			const newIndex = this.dict.size + 1;
 			this.dict.set(value, newIndex);
-			this.writeByte(CORE_TYPES.DictValue);
-			this.writeString(value);
+			this.writeCore(CORE_TYPES.DictValue, value);
 		}
 	}
 
@@ -256,21 +269,70 @@ export class BinaryWriter {
 		return this.target.subarray(start, end);
 	}
 
+	private _writeCustom(value: any) {
+		for (const ext of this.extensions.values()) {
+			const result = ext.encode(value);
+
+			if (result !== undefined) {
+				const constructorId = coreType(result);
+
+				if (constructorId === CORE_TYPES.None) {
+					throw new TypeError(`Invalid encode extension = ${ext.token} type of ${value}`);
+				}
+
+				if (ext.token !== -1) {
+					this.writeByte(ext.token);
+				}
+
+				this.writeCore(constructorId, result);
+
+				return true;
+			}
+		}
+
+		return false;
+	}
+
 	writeObject(value: any) {
 		if (value === undefined) return;
 
 		const constructorId = coreType(value);
 
+		// console.log('write', {
+		// 	offset: this.offset,
+		// 	constructorId: CORE_TYPES[constructorId],
+		// 	value: String(value),
+		// });
+
 		if (constructorId === CORE_TYPES.None) {
-			throw new TypeError(`Invalid core type of ${typeof value}`);
+			if (this._writeCustom(value)) {
+				return;
+			}
+
+			throw new TypeError(`Invalid core type of ${value}`);
 		}
 
+		this.writeCore(constructorId, value);
+	}
+
+	private writeCore(constructorId: CORE_TYPES, value: any) {
 		if (![CORE_TYPES.BoolFalse, CORE_TYPES.BoolTrue, CORE_TYPES.Null].includes(constructorId)) {
 			this.writeByte(constructorId);
 		}
 
 		switch (constructorId) {
-			case CORE_TYPES.BoolFalse:
+			case CORE_TYPES.DictIndex: {
+				return this.writeLength(value);
+			}
+
+			case CORE_TYPES.DictValue: {
+				return this.writeString(value);
+			}
+
+			case CORE_TYPES.BoolFalse: {
+				return this.writeBool(value);
+			}
+
 			case CORE_TYPES.BoolTrue: {
 				return this.writeBool(value);
 			}

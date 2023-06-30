@@ -1,11 +1,17 @@
 import { CORE_TYPES } from './constants.js';
+import { TLExtension } from './extension.js';
 import { bytesToUtf8 } from './helpers.js';
+
+export interface BinaryReaderOptions {
+	extensions?: TLExtension[];
+}
 
 export class BinaryReader {
 	private target: Buffer | Uint8Array;
 	private targetView: DataView;
 	private _last?: any;
 	private _dict: Map<number, string>;
+	private extensions: Map<number, TLExtension>;
 	offset: number;
 	length: number;
 
@@ -13,13 +19,20 @@ export class BinaryReader {
 	 * Small utility class to read binary data.
 	 * @param data {Buffer}
 	 */
-	constructor(data: Buffer | Uint8Array) {
+	constructor(data: Buffer | Uint8Array, options?: BinaryReaderOptions) {
 		this.target = data;
 		this.targetView = new DataView(data.buffer, 0, data.length);
 		this._last = undefined;
 		this._dict = new Map();
 		this.offset = 0;
 		this.length = data.length;
+		this.extensions = new Map();
+
+		if (options && options.extensions) {
+			options.extensions.forEach((ext) => {
+				this.extensions.set(ext.token, ext);
+			});
+		}
 	}
 
 	readByte() {
@@ -48,7 +61,7 @@ export class BinaryReader {
 		if (signed) {
 			this._last = this.targetView.getInt16(this.offset, true);
 		} else {
-			this._last = this.targetView.getUint16(this.offset);
+			this._last = this.targetView.getUint16(this.offset, true);
 		}
 		this.offset += 2;
 		return this._last as number;
@@ -199,8 +212,23 @@ export class BinaryReader {
 	 * Reads a object.
 	 */
 	readObject(): any {
+		const offset = this.offset;
 		const constructorId = this.readByte();
+		const ext = this.extensions.get(constructorId);
 
+		let value: any;
+
+		if (ext) {
+			value = this.readObject();
+			value = ext.decode(value);
+		} else {
+			value = this.readCore(constructorId);
+		}
+
+		return value;
+	}
+
+	private readCore(constructorId: CORE_TYPES) {
 		switch (constructorId) {
 			case CORE_TYPES.None:
 				return this.readObject();
@@ -248,25 +276,29 @@ export class BinaryReader {
 	readDictionary() {
 		const constructorId = this.readByte();
 
+		let key = null;
+
 		switch (constructorId) {
 			case CORE_TYPES.DictIndex: {
 				const idx = this.readLength();
-				return this._dict.get(idx)!;
+				key = this._dict.get(idx)!;
+				break;
 			}
 			case CORE_TYPES.DictValue: {
-				const key = this.readString();
+				key = this.readString();
 				this._dict.set(this._dict.size + 1, key);
-
-				return key;
+				break;
 			}
 			case CORE_TYPES.None: {
-				return null;
+				key = null;
+				break;
+			}
+			default: {
+				this.seek(-1);
 			}
 		}
 
-		this.seek(-1);
-
-		return null;
+		return key;
 	}
 
 	readMap(checkConstructor = true) {

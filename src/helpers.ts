@@ -106,12 +106,37 @@ export function coreType(value: any): CORE_TYPES {
 				return CORE_TYPES.Vector;
 			}
 
-			// @ts-ignore
-			if (toString.call(value) === '[object Object]') {
+			if (isPlainObject(value)) {
 				return CORE_TYPES.Map;
 			}
 		}
 	}
 
 	return CORE_TYPES.None;
+}
+
+/** @ts-ignore */
+const isObject = (val: any): val is object => toString.call(val) === '[object Object]';
+
+function isPlainObject(value: any): value is object {
+	let ctor, prot;
+
+	if (!isObject(value)) return false;
+
+	// If it has modified constructor
+	ctor = value.constructor;
+	if (ctor === undefined) return true;
+
+	// If it has modified prototype
+	prot = ctor.prototype;
+	if (isObject(prot) === false) return false;
+
+	// If constructor does not have an Object-specific method
+	// eslint-disable-next-line no-prototype-builtins
+	if (prot.hasOwnProperty('isPrototypeOf') === false) {
+		return false;
+	}
+
+	// Most likely a plain Object
+	return true;
 }

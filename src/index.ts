@@ -1,3 +1,4 @@
-export { BinaryWriter } from './BinaryWriter.js';
-export { BinaryReader } from './BinaryReader.js';
+export * from './BinaryWriter.js';
+export * from './BinaryReader.js';
 export * from './constants.js';
+export * from './extension.js';
