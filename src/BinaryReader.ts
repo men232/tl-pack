@@ -73,7 +73,7 @@ export class BinaryReader {
 		if (signed) {
 			this._last = this.targetView.getInt8(this.offset);
 		} else {
-			this._last = this.targetView.getInt8(this.offset);
+			this._last = this.targetView.getUint8(this.offset);
 		}
 		this.offset += 1;
 		return this._last as number;

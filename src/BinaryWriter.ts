@@ -145,7 +145,12 @@ export class BinaryWriter {
 
 	writeInt8(value: number, signed = true) {
 		this.allocate(1);
-		this.target[this.offset++] = value;
+
+		if (signed) {
+			this.target[this.offset++] = value;
+		} else {
+			this.targetView.setUint8(this.offset++, value);
+		}
 	}
 
 	writeFloat(value: number) {
