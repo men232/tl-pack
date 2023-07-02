@@ -1,6 +1,8 @@
+import pako from 'pako';
 import { CORE_TYPES } from './constants.js';
+import { Dictionary } from './dictionary.js';
 import { TLExtension } from './extension.js';
-import { coreType, serializeBytes } from './helpers.js';
+import { coreType } from './helpers.js';
 
 const hasNodeBuffer = typeof Buffer !== 'undefined';
 
@@ -27,20 +29,31 @@ function byteArrayAllocate(length: number) {
 }
 
 export interface BinaryWriterOptions {
+	gzip?: boolean;
+	dictionary?: string[] | Dictionary;
 	extensions?: TLExtension[];
 }
 
+const NO_CONSTRUCTOR = new Set([CORE_TYPES.BoolFalse, CORE_TYPES.BoolTrue, CORE_TYPES.Null]);
+
+const SUPPORT_COMPRESSION = new Set([CORE_TYPES.String]);
+
 export class BinaryWriter {
+	private withGzip: boolean;
 	private target: Buffer | Uint8Array;
 	private targetView: DataView;
-	private dict: Map<string, number>;
+	private dictionary?: Dictionary;
+	private dictionaryExtended: Dictionary;
 	private extensions: Map<number, TLExtension>;
 	offset: number;
 
 	constructor(options?: BinaryWriterOptions) {
-		this.dict = new Map();
 		this.offset = 0;
 		this.extensions = new Map();
+		this.withGzip = !!options && !!options.gzip;
+
+		this.target = byteArrayAllocate(8192);
+		this.targetView = new DataView(this.target.buffer, 0, this.target.length);
 
 		if (options && options.extensions) {
 			options.extensions.forEach((ext) => {
@@ -48,8 +61,17 @@ export class BinaryWriter {
 			});
 		}
 
-		this.target = byteArrayAllocate(8192);
-		this.targetView = new DataView(this.target.buffer, 0, this.target.length);
+		if (!options) {
+			this.dictionary = new Dictionary();
+		} else if (options.dictionary instanceof Dictionary) {
+			this.dictionary = options.dictionary;
+		} else if (Array.isArray(options.dictionary)) {
+			this.dictionary = new Dictionary(options.dictionary);
+		} else {
+			this.dictionary = new Dictionary();
+		}
+
+		this.dictionaryExtended = new Dictionary(undefined, this.dictionary.size);
 	}
 
 	allocate(size: number) {
@@ -178,6 +200,9 @@ export class BinaryWriter {
 	}
 
 	writeString(value: string) {
+		// const compressed = pako.deflateRaw(value, { level: 9 });
+		// this.writeBytes(compressed);
+
 		let start = this.offset;
 		let require = value.length << 2;
 
@@ -252,26 +277,37 @@ export class BinaryWriter {
 	}
 
 	wireDictionary(value: string) {
-		if (this.dict.has(value)) {
-			const idx = this.dict.get(value)!;
-			this.writeCore(CORE_TYPES.DictIndex, idx);
-		} else {
-			const newIndex = this.dict.size + 1;
-			this.dict.set(value, newIndex);
+		let idx;
+
+		if (this.dictionary) {
+			idx = this.dictionary.getIndex(value);
+		}
+
+		if (idx === undefined) {
+			idx = this.dictionaryExtended.getIndex(value);
+		}
+
+		if (idx === undefined) {
+			this.dictionaryExtended.maybeInsert(value);
 			this.writeCore(CORE_TYPES.DictValue, value);
+		} else {
+			this.writeCore(CORE_TYPES.DictIndex, idx);
 		}
 	}
 
+	writeGzip(value: any) {
+		const compressed = pako.deflateRaw(value, { level: 9 });
+		this.writeBytes(compressed);
+	}
+
 	encode(value: any) {
-		const start = this.offset;
+		this.offset = 0;
+		this.target = byteArrayAllocate(256);
+		this.targetView = new DataView(this.target.buffer, 0, this.target.length);
 
 		this.writeObject(value);
 
-		const end = this.offset;
-
-		this.offset = start;
-
-		return this.target.subarray(start, end);
+		return this.getBuffer();
 	}
 
 	private _writeCustom(value: any) {
@@ -320,12 +356,32 @@ export class BinaryWriter {
 		this.writeCore(constructorId, value);
 	}
 
+	writeObjectGzip(value: any) {
+		const writer = new BinaryWriter();
+
+		writer.extensions = this.extensions;
+		writer.dictionary = this.dictionary;
+		writer.dictionaryExtended = this.dictionaryExtended;
+
+		writer.writeObject(value);
+		this.writeCore(CORE_TYPES.GZIP, writer.getBuffer());
+	}
+
 	private writeCore(constructorId: CORE_TYPES, value: any) {
-		if (![CORE_TYPES.BoolFalse, CORE_TYPES.BoolTrue, CORE_TYPES.Null].includes(constructorId)) {
+		// console.log('write', { constructorId: CORE_TYPES[constructorId] || constructorId, value });
+
+		if (this.withGzip && SUPPORT_COMPRESSION.has(constructorId)) {
+			this.writeObjectGzip(value);
+			return;
+		} else if (!NO_CONSTRUCTOR.has(constructorId)) {
 			this.writeByte(constructorId);
 		}
 
 		switch (constructorId) {
+			case CORE_TYPES.GZIP: {
+				return this.writeGzip(value);
+			}
+
 			case CORE_TYPES.DictIndex: {
 				return this.writeLength(value);
 			}

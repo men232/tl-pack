@@ -1,6 +1,6 @@
 {
 	"name": "@andrew_l/tl-pack",
-	"version": "0.0.4",
+	"version": "0.0.5",
 	"description": "",
 	"type": "module",
 	"scripts": {
@@ -26,10 +26,14 @@
 	},
 	"devDependencies": {
 		"@types/node": "^20.3.2",
+		"@types/pako": "^2.0.0",
 		"eslint-config-prettier": "^8.8.0",
 		"nodemon": "^2.0.22",
 		"prettier": "^2.8.8",
 		"ts-node": "^10.9.1",
 		"typescript": "^5.1.5"
+	},
+	"dependencies": {
+		"pako": "^2.1.0"
 	}
 }

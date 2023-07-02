@@ -18,4 +18,5 @@ export enum CORE_TYPES {
 	DictValue,
 	DictIndex,
 	String,
-};
+	GZIP,
+}

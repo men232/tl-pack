@@ -1,8 +1,11 @@
+import pako from 'pako';
 import { CORE_TYPES } from './constants.js';
+import { Dictionary } from './dictionary.js';
 import { TLExtension } from './extension.js';
 import { bytesToUtf8 } from './helpers.js';
 
 export interface BinaryReaderOptions {
+	dictionary?: string[] | Dictionary;
 	extensions?: TLExtension[];
 }
 
@@ -10,7 +13,8 @@ export class BinaryReader {
 	private target: Buffer | Uint8Array;
 	private targetView: DataView;
 	private _last?: any;
-	private _dict: Map<number, string>;
+	private dictionary?: Dictionary;
+	private dictionaryExtended: Dictionary;
 	private extensions: Map<number, TLExtension>;
 	offset: number;
 	length: number;
@@ -23,7 +27,6 @@ export class BinaryReader {
 		this.target = data;
 		this.targetView = new DataView(data.buffer, 0, data.length);
 		this._last = undefined;
-		this._dict = new Map();
 		this.offset = 0;
 		this.length = data.length;
 		this.extensions = new Map();
@@ -33,6 +36,18 @@ export class BinaryReader {
 				this.extensions.set(ext.token, ext);
 			});
 		}
+
+		if (!options) {
+			this.dictionary = new Dictionary();
+		} else if (options.dictionary instanceof Dictionary) {
+			this.dictionary = options.dictionary;
+		} else if (Array.isArray(options.dictionary)) {
+			this.dictionary = new Dictionary(options.dictionary);
+		} else {
+			this.dictionary = new Dictionary();
+		}
+
+		this.dictionaryExtended = new Dictionary(undefined, this.dictionary.size);
 	}
 
 	readByte() {
@@ -152,6 +167,16 @@ export class BinaryReader {
 		return firstByte;
 	}
 
+	readAll() {
+		const result: any[] = [];
+
+		while (this.length > this.offset) {
+			result.push(this.readObject());
+		}
+
+		return result;
+	}
+
 	/**
 	 * @returns {Uint8Array | Buffer}
 	 */
@@ -179,6 +204,8 @@ export class BinaryReader {
 		const bytes = this.target.subarray(this.offset, this.offset + length);
 
 		this.offset += bytes.length;
+
+		// return pako.inflateRaw(bytes, { to: 'string' });
 
 		return bytesToUtf8(bytes);
 	}
@@ -212,7 +239,6 @@ export class BinaryReader {
 	 * Reads a object.
 	 */
 	readObject(): any {
-		const offset = this.offset;
 		const constructorId = this.readByte();
 		const ext = this.extensions.get(constructorId);
 
@@ -228,10 +254,27 @@ export class BinaryReader {
 		return value;
 	}
 
+	readObjectGzip() {
+		const bytes = this.readGzip();
+		const reader = new BinaryReader(bytes);
+
+		reader.extensions = this.extensions;
+		reader.dictionary = this.dictionary;
+		reader.dictionaryExtended = this.dictionaryExtended;
+
+		return reader.readObject();
+	}
+
+	readGzip() {
+		return pako.inflateRaw(this.readBytes());
+	}
+
 	private readCore(constructorId: CORE_TYPES) {
 		switch (constructorId) {
 			case CORE_TYPES.None:
 				return this.readObject();
+			case CORE_TYPES.GZIP:
+				return this.readObjectGzip();
 			case CORE_TYPES.BoolTrue:
 				return true;
 			case CORE_TYPES.BoolFalse:
@@ -273,6 +316,20 @@ export class BinaryReader {
 		);
 	}
 
+	getDictionaryValue(index: number) {
+		let value;
+
+		if (this.dictionary) {
+			value = this.dictionary.getValue(index);
+		}
+
+		if (value === undefined) {
+			value = this.dictionaryExtended.getValue(index);
+		}
+
+		return value;
+	}
+
 	readDictionary() {
 		const constructorId = this.readByte();
 
@@ -281,12 +338,12 @@ export class BinaryReader {
 		switch (constructorId) {
 			case CORE_TYPES.DictIndex: {
 				const idx = this.readLength();
-				key = this._dict.get(idx)!;
+				key = this.getDictionaryValue(idx)!;
 				break;
 			}
 			case CORE_TYPES.DictValue: {
 				key = this.readString();
-				this._dict.set(this._dict.size + 1, key);
+				this.dictionaryExtended.maybeInsert(key);
 				break;
 			}
 			case CORE_TYPES.None: {
