@@ -10,10 +10,11 @@
 	"keywords": [],
 	"author": "Andrew L.",
 	"license": "ISC",
-	"types": "./dist",
 	"files": [
 		"dist/**"
 	],
+	"main": "./dist/index.js",
+	"types": "./dist/index.d.ts",
 	"exports": {
 		".": {
 			"import": "./dist/index.js",

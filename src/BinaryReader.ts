@@ -2,7 +2,7 @@ import pako from 'pako';
 import { CORE_TYPES } from './constants.js';
 import { Dictionary } from './dictionary.js';
 import { TLExtension } from './extension.js';
-import { bytesToUtf8 } from './helpers.js';
+import { bytesToUtf8, float32, float64, int32 } from './helpers.js';
 
 export interface BinaryReaderOptions {
 	dictionary?: string[] | Dictionary;
@@ -11,7 +11,6 @@ export interface BinaryReaderOptions {
 
 export class BinaryReader {
 	private target: Buffer | Uint8Array;
-	private targetView: DataView;
 	private _last?: any;
 	private dictionary?: Dictionary;
 	private dictionaryExtended: Dictionary;
@@ -25,7 +24,6 @@ export class BinaryReader {
 	 */
 	constructor(data: Buffer | Uint8Array, options?: BinaryReaderOptions) {
 		this.target = data;
-		this.targetView = new DataView(data.buffer, 0, data.length);
 		this._last = undefined;
 		this.offset = 0;
 		this.length = data.length;
@@ -60,37 +58,40 @@ export class BinaryReader {
 	readInt32(signed = true) {
 		this.assertRead(4);
 
-		if (signed) {
-			this._last = this.targetView.getInt32(this.offset, true);
-		} else {
-			this._last = this.targetView.getUint32(this.offset, true);
+		this._last =
+			this.target[this.offset++] |
+			(this.target[this.offset++] << 8) |
+			(this.target[this.offset++] << 16) |
+			(this.target[this.offset++] << 24);
+
+		if (!signed) {
+			this._last = this._last >>> 0;
 		}
 
-		this.offset += 4;
 		return this._last as number;
 	}
 
 	readInt16(signed = true) {
 		this.assertRead(2);
 
+		this._last = this.target[this.offset++] | (this.target[this.offset++] << 8);
+
 		if (signed) {
-			this._last = this.targetView.getInt16(this.offset, true);
-		} else {
-			this._last = this.targetView.getUint16(this.offset, true);
+			this._last = (this._last << 16) >> 16;
 		}
-		this.offset += 2;
+
 		return this._last as number;
 	}
 
 	readInt8(signed = true) {
 		this.assertRead(1);
 
+		this._last = this.target[this.offset++];
+
 		if (signed) {
-			this._last = this.targetView.getInt8(this.offset);
-		} else {
-			this._last = this.targetView.getUint8(this.offset);
+			this._last = (this._last << 24) >> 24;
 		}
-		this.offset += 1;
+
 		return this._last as number;
 	}
 
@@ -100,8 +101,9 @@ export class BinaryReader {
 	 */
 	readFloat() {
 		this.assertRead(4);
-		this._last = this.targetView.getFloat32(this.offset, true);
-		this.offset += 4;
+
+		int32[0] = this.readInt32();
+		this._last = float32[0];
 
 		return this._last as number;
 	}
@@ -112,8 +114,10 @@ export class BinaryReader {
 	 */
 	readDouble() {
 		this.assertRead(8);
-		this._last = this.targetView.getFloat64(this.offset, true);
-		this.offset += 8;
+
+		int32[0] = this.readInt32();
+		int32[1] = this.readInt32();
+		this._last = float64[0];
 
 		return this._last as number;
 	}
@@ -136,6 +140,18 @@ export class BinaryReader {
 			Error.captureStackTrace(err, this.assertRead);
 
 			throw err;
+		}
+	}
+
+	assertConstructor(constructorId: CORE_TYPES) {
+		const byte = this.readByte();
+
+		if (byte !== constructorId) {
+			throw new Error(
+				`Invalid constructor code, expected = ${CORE_TYPES[constructorId]}, got = ${
+					CORE_TYPES[byte] || byte
+				}, offset = ${this.offset - 1}`,
+			);
 		}
 	}
 
@@ -281,6 +297,8 @@ export class BinaryReader {
 				return false;
 			case CORE_TYPES.Vector:
 				return this.readVector(false);
+			case CORE_TYPES.VectorDynamic:
+				return this.readVectorDynamic(false);
 			case CORE_TYPES.Null:
 				return null;
 			case CORE_TYPES.Binary:
@@ -359,8 +377,8 @@ export class BinaryReader {
 	}
 
 	readMap(checkConstructor = true) {
-		if (checkConstructor && this.readByte() !== CORE_TYPES.Map) {
-			throw new Error('Invalid constructor code, map was expected');
+		if (checkConstructor) {
+			this.assertConstructor(CORE_TYPES.Map);
 		}
 
 		const temp: Record<string, any> = {};
@@ -377,7 +395,6 @@ export class BinaryReader {
 
 	decode(value: Buffer | Uint8Array) {
 		this.target = value;
-		this.targetView = new DataView(value.buffer, 0, value.length);
 		this._last = undefined;
 		this.offset = 0;
 		this.length = value.length;
@@ -390,15 +407,62 @@ export class BinaryReader {
 	 * @returns {any[]}
 	 */
 	readVector(checkConstructor = true) {
-		if (checkConstructor && this.readByte() !== CORE_TYPES.Vector) {
-			throw new Error('Invalid constructor code, vector was expected');
+		if (checkConstructor) {
+			this.assertConstructor(CORE_TYPES.Vector);
 		}
+
 		const count = this.readLength();
 		const temp = [];
 
 		for (let i = 0; i < count; i++) {
 			temp.push(this.readObject());
 		}
+		return temp;
+	}
+
+	/**
+	 * Reads a vector (a list) of objects.
+	 * @returns {any[]}
+	 */
+	readVectorDynamic(checkConstructor = true) {
+		if (checkConstructor) {
+			this.assertConstructor(CORE_TYPES.VectorDynamic);
+		}
+
+		const temp = [];
+
+		let complete = false;
+
+		while (this.length > this.offset) {
+			const constructorId = this.readByte();
+
+			if (constructorId === CORE_TYPES.None) {
+				complete = true;
+				break;
+			}
+
+			const ext = this.extensions.get(constructorId);
+
+			let value: any;
+
+			if (ext) {
+				value = this.readObject();
+				value = ext.decode(value);
+			} else {
+				value = this.readCore(constructorId);
+			}
+
+			temp.push(value);
+		}
+
+		if (!complete) {
+			const err = new Error(`DynamicVector incomplete.`);
+			(err as any).incomplete = true;
+			Error.captureStackTrace(err, this.readDictionary);
+
+			throw err;
+		}
+
 		return temp;
 	}
 

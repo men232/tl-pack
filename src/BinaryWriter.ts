@@ -2,7 +2,7 @@ import pako from 'pako';
 import { CORE_TYPES } from './constants.js';
 import { Dictionary } from './dictionary.js';
 import { TLExtension } from './extension.js';
-import { coreType } from './helpers.js';
+import { coreType, float32, float64, int32 } from './helpers.js';
 
 const hasNodeBuffer = typeof Buffer !== 'undefined';
 
@@ -41,7 +41,6 @@ const SUPPORT_COMPRESSION = new Set([CORE_TYPES.String]);
 export class BinaryWriter {
 	private withGzip: boolean;
 	private target: Buffer | Uint8Array;
-	private targetView: DataView;
 	private dictionary?: Dictionary;
 	private dictionaryExtended: Dictionary;
 	private extensions: Map<number, TLExtension>;
@@ -53,7 +52,6 @@ export class BinaryWriter {
 		this.withGzip = !!options && !!options.gzip;
 
 		this.target = byteArrayAllocate(8192);
-		this.targetView = new DataView(this.target.buffer, 0, this.target.length);
 
 		if (options && options.extensions) {
 			options.extensions.forEach((ext) => {
@@ -82,7 +80,7 @@ export class BinaryWriter {
 		}
 	}
 
-	makeRoom(end: number) {
+	private makeRoom(end: number) {
 		let start = 0;
 		let newSize = 0;
 		let target = this.target;
@@ -113,7 +111,6 @@ export class BinaryWriter {
 		}
 
 		this.target = newBuffer;
-		this.targetView = newView;
 	}
 
 	get safeEnd() {
@@ -145,46 +142,48 @@ export class BinaryWriter {
 		this.allocate(4);
 
 		if (signed) {
-			this.targetView.setInt32(this.offset, value, true);
+			this.target[this.offset++] = value;
+			this.target[this.offset++] = value >> 8;
+			this.target[this.offset++] = value >> 16;
+			this.target[this.offset++] = value >> 24;
 		} else {
-			this.targetView.setUint32(this.offset, value, true);
+			this.target[this.offset++] = value;
+			this.target[this.offset++] = value >> 8;
+			this.target[this.offset++] = value >> 16;
+			this.target[this.offset++] = value >> 24;
 		}
-
-		this.offset += 4;
 	}
 
 	writeInt16(value: number, signed = true) {
 		this.allocate(2);
 
 		if (signed) {
-			this.targetView.setInt16(this.offset, value, true);
+			this.target[this.offset++] = value;
+			this.target[this.offset++] = value >> 8;
 		} else {
-			this.targetView.setUint16(this.offset, value, true);
+			this.target[this.offset++] = value;
+			this.target[this.offset++] = value >> 8;
 		}
-
-		this.offset += 2;
 	}
 
 	writeInt8(value: number, signed = true) {
 		this.allocate(1);
 
-		if (signed) {
-			this.target[this.offset++] = value;
-		} else {
-			this.targetView.setUint8(this.offset++, value);
-		}
+		this.target[this.offset++] = value;
 	}
 
 	writeFloat(value: number) {
 		this.allocate(4);
-		this.targetView.setFloat32(this.offset, value, true);
-		this.offset += 4;
+		float32[0] = value;
+		this.writeInt32(int32[0]);
 	}
 
 	writeDouble(value: number) {
 		this.allocate(8);
-		this.targetView.setFloat64(this.offset, value, true);
-		this.offset += 8;
+
+		float64[0] = value;
+		this.writeInt32(int32[0], false);
+		this.writeInt32(int32[1], false);
 	}
 
 	writeDate(value: number | Date) {
@@ -303,11 +302,18 @@ export class BinaryWriter {
 	encode(value: any) {
 		this.offset = 0;
 		this.target = byteArrayAllocate(256);
-		this.targetView = new DataView(this.target.buffer, 0, this.target.length);
 
 		this.writeObject(value);
 
 		return this.getBuffer();
+	}
+
+	startDynamicVector() {
+		this.writeByte(CORE_TYPES.VectorDynamic);
+	}
+
+	endDynamicVector() {
+		this.writeByte(CORE_TYPES.None);
 	}
 
 	private _writeCustom(value: any) {
@@ -368,8 +374,6 @@ export class BinaryWriter {
 	}
 
 	private writeCore(constructorId: CORE_TYPES, value: any) {
-		// console.log('write', { constructorId: CORE_TYPES[constructorId] || constructorId, value });
-
 		if (this.withGzip && SUPPORT_COMPRESSION.has(constructorId)) {
 			this.writeObjectGzip(value);
 			return;

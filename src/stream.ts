@@ -1,10 +1,10 @@
 import { Transform, type TransformCallback, type TransformOptions } from 'stream';
 import { BinaryWriter, BinaryWriterOptions } from './BinaryWriter.js';
 import { BinaryReader } from './BinaryReader.js';
+import { CORE_TYPES } from './constants.js';
 
 export interface TLEncodeOptions extends BinaryWriterOptions {
 	streamOptions?: TransformOptions;
-	writeVectorWhenEmpty?: boolean;
 }
 
 export class TLEncode extends Transform {
@@ -21,10 +21,17 @@ export class TLEncode extends Transform {
 
 		const customFlush = opts.streamOptions.flush;
 
+		const VECTOR_TYPES = new Uint8Array(2);
+
+		VECTOR_TYPES[0] = CORE_TYPES.VectorDynamic;
+		VECTOR_TYPES[1] = CORE_TYPES.None;
+
+		// push a byte about dynamic vector starting
+		this.push(VECTOR_TYPES.subarray(0, 1));
+
 		this._flush = (callback) => {
-			if (this.count === 0 && opts.writeVectorWhenEmpty) {
-				this.push(writer.encode([]));
-			}
+			// push a byte about dynamic vector ending
+			this.push(VECTOR_TYPES.subarray(1, 2));
 
 			if (customFlush) {
 				customFlush.call(this, callback);
