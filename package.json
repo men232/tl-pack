@@ -1,6 +1,6 @@
 {
 	"name": "@andrew_l/tl-pack",
-	"version": "0.0.5",
+	"version": "0.0.6",
 	"description": "",
 	"type": "module",
 	"scripts": {
@@ -13,6 +13,13 @@
 	"files": [
 		"dist/**"
 	],
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/men232/tl-pack.git"
+	},
+	"bugs": {
+		"url": "https://github.com/men232/tl-pack/issues"
+	},
 	"main": "./dist/index.js",
 	"types": "./dist/index.d.ts",
 	"exports": {
