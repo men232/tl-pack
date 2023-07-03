@@ -18,7 +18,7 @@ export function createExtension(
 		throw new TypeError('Token must be a 8 bit number');
 	}
 
-	if (token < 35) {
+	if (token !== -1 && token < 35) {
 		throw new TypeError('Tokens reserved from 0 to 34');
 	}
 

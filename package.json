@@ -1,7 +1,7 @@
 {
 	"name": "@andrew_l/tl-pack",
-	"version": "0.0.7",
-	"description": "",
+	"version": "0.1.0",
+  "description": "Binary serialization library",
 	"type": "module",
 	"scripts": {
 		"dev": "nodemon src/playground.ts",
