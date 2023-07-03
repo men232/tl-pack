@@ -20,23 +20,39 @@ const writer = new BinaryWriter();
 // use to compress this part of data
 // writer.writeObjectGzip
 writer.writeObject({
-	null: null,
-	uint8: 255,
-	uint16: 256,
-	uint32: 65536,
-	int8: -128,
-	int16: -32768,
-	int32: -2147483648,
-	double: 3.14,
-	string: 'Hello world',
-	vector: [1, 2, 3, 4, 5, { text: 'hi' }],
-	map: { foo: 'bar' },
-	date: new Date(),
+  null: null,
+  uint8: 255,
+  uint16: 256,
+  uint32: 65536,
+  int8: -128,
+  int16: -32768,
+  int32: -2147483648,
+  double: 3.14,
+  string: 'Hello world',
+  vector: [1, 2, 3, 4, 5, { text: 'hi' }],
+  map: { foo: 'bar' },
+  date: new Date(),
 });
 
 const reader = new BinaryReader(writer.getBuffer());
 
 console.log(reader.readObject());
+/**
+{
+  null: null,
+  uint8: 255,
+  uint16: 256,
+  uint32: 65536,
+  int8: -128,
+  int16: -32768,
+  int32: -2147483648,
+  double: 3.14,
+  string: 'Hello world',
+  vector: [ 1, 2, 3, 4, 5, { text: 'hi' } ],
+  map: { foo: 'bar' },
+  date: 2023-07-03T12:22:26.000Z
+}
+ */
 ```
 
 ## Supported Types
@@ -73,9 +89,9 @@ const values = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 const dataStream = new Readable({ objectMode: true });
 
 dataStream._read = () => {
-	const chunk = values.shift();
+  const chunk = values.shift();
 
-	dataStream.push(chunk || null);
+  dataStream.push(chunk || null);
 };
 
 const encode = new TLEncode();
@@ -96,31 +112,38 @@ import { BinaryWriter, BinaryReader, createExtension } from '@andrew_l/tl-pack';
 const ObjectId = mongoose.Types.ObjectId;
 
 const extensions = [
-	// Reserving token - 100 for ObjectId types
-	createExtension(100, {
-		encode(value) {
-			if (value?._bsontype === 'ObjectID') {
-				return value.toJSON(); // (string)
-			}
-		},
-		// on client side, you possibly need a decoding as a plain string.
-		decode(value) {
-			return new ObjectId(value);
-		},
-	}),
+  // Reserving token - 100 for ObjectId types
+  createExtension(100, {
+    encode(value) {
+      if (value?._bsontype === 'ObjectID') {
+        return value.toJSON(); // (string)
+      }
+    },
+    // on client side, you possibly need a decoding as a plain string.
+    decode(value) {
+      return new ObjectId(value);
+    },
+  }),
 ];
 
 const writer = new BinaryWriter({ extensions });
 
 writer.writeObject({
-	_id: new Object(),
-	firstName: 'Andrew',
-	lastName: 'L.',
+  _id: new Object(),
+  firstName: 'Andrew',
+  lastName: 'L.',
 });
 
 const reader = new BinaryReader(writer.getBuffer(), { extensions });
 
 console.log(reader.readObject());
+/**
+{
+  _id: 64a2be105e19f67e19a71a1d,
+  firstName: 'Andrew',
+  lastName: 'L.'
+}
+ */
 ```
 
 ## Dictionary
