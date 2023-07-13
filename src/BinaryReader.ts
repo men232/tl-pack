@@ -12,9 +12,11 @@ export interface BinaryReaderOptions {
 export class BinaryReader {
 	private target: Buffer | Uint8Array;
 	private _last?: any;
+	private _lastObject?: any;
 	private dictionary?: Dictionary;
 	private dictionaryExtended: Dictionary;
 	private extensions: Map<number, TLExtension>;
+	private _repeat?: { pool: number; value: any };
 	offset: number;
 	length: number;
 
@@ -24,7 +26,6 @@ export class BinaryReader {
 	 */
 	constructor(data: Buffer | Uint8Array, options?: BinaryReaderOptions) {
 		this.target = data;
-		this._last = undefined;
 		this.offset = 0;
 		this.length = data.length;
 		this.extensions = new Map();
@@ -205,6 +206,8 @@ export class BinaryReader {
 
 		this.offset += bytes.length;
 
+		this._last = bytes;
+
 		return bytes;
 	}
 
@@ -223,7 +226,11 @@ export class BinaryReader {
 
 		// return pako.inflateRaw(bytes, { to: 'string' });
 
-		return bytesToUtf8(bytes);
+		const result = bytesToUtf8(bytes);
+
+		this._last = result;
+
+		return result;
 	}
 
 	/**
@@ -232,6 +239,7 @@ export class BinaryReader {
 	 */
 	readBool() {
 		const value = this.readByte();
+
 		if (value === CORE_TYPES.BoolTrue) {
 			return true;
 		} else if (value === CORE_TYPES.BoolFalse) {
@@ -248,6 +256,7 @@ export class BinaryReader {
 	 */
 	readDate() {
 		const value = this.readDouble();
+
 		return new Date(value * 1000);
 	}
 
@@ -255,6 +264,15 @@ export class BinaryReader {
 	 * Reads a object.
 	 */
 	readObject(): any {
+		if (this._repeat) {
+			if (this._repeat.pool > 0) {
+				--this._repeat.pool;
+				return this._repeat.value;
+			} else {
+				this._repeat = undefined;
+			}
+		}
+
 		const constructorId = this.readByte();
 		const ext = this.extensions.get(constructorId);
 
@@ -264,7 +282,7 @@ export class BinaryReader {
 			value = this.readObject();
 			value = ext.decode(value);
 		} else {
-			value = this.readCore(constructorId);
+			value = this._lastObject = this.readCore(constructorId);
 		}
 
 		return value;
@@ -325,6 +343,11 @@ export class BinaryReader {
 				return this.readDouble();
 			case CORE_TYPES.Map:
 				return this.readMap(false);
+			case CORE_TYPES.Repeat: {
+				const size = this.readLength();
+				this._repeat = { pool: size - 1, value: this._lastObject };
+				return this._lastObject;
+			}
 		}
 
 		throw new Error(
@@ -396,6 +419,8 @@ export class BinaryReader {
 	decode(value: Buffer | Uint8Array) {
 		this.target = value;
 		this._last = undefined;
+		this._lastObject = undefined;
+		this._repeat = undefined;
 		this.offset = 0;
 		this.length = value.length;
 
@@ -417,6 +442,7 @@ export class BinaryReader {
 		for (let i = 0; i < count; i++) {
 			temp.push(this.readObject());
 		}
+
 		return temp;
 	}
 
@@ -462,6 +488,8 @@ export class BinaryReader {
 
 			throw err;
 		}
+
+		this._last = temp;
 
 		return temp;
 	}

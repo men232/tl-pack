@@ -10,6 +10,8 @@ const MAX_BUFFER_SIZE = hasNodeBuffer ? 0x100000000 : 0x7fd00000;
 
 const textEncoder = new TextEncoder();
 
+const noop = Symbol();
+
 const writeUtf8 = hasNodeBuffer
 	? function (target: any, value: string, offset: number) {
 			const length = target.utf8Write(value, offset, 0xffffffff) as number;
@@ -44,6 +46,8 @@ export class BinaryWriter {
 	private dictionary?: Dictionary;
 	private dictionaryExtended: Dictionary;
 	private extensions: Map<number, TLExtension>;
+	private _last: any = noop;
+	private _repeat?: { offset: number; count: number };
 	offset: number;
 
 	constructor(options?: BinaryWriterOptions) {
@@ -301,6 +305,8 @@ export class BinaryWriter {
 
 	encode(value: any) {
 		this.offset = 0;
+		this._last = noop;
+		this._repeat = undefined;
 		this.target = byteArrayAllocate(256);
 
 		this.writeObject(value);
@@ -359,7 +365,13 @@ export class BinaryWriter {
 			throw new TypeError(`Invalid core type of ${value}`);
 		}
 
-		this.writeCore(constructorId, value);
+		if (this._last === value) {
+			this.writeRepeat();
+		} else {
+			this._last = value;
+			this._repeat = undefined;
+			this.writeCore(constructorId, value);
+		}
 	}
 
 	writeObjectGzip(value: any) {
@@ -454,5 +466,19 @@ export class BinaryWriter {
 				return this.writeMap(value);
 			}
 		}
+	}
+
+	private writeRepeat() {
+		if (!this._repeat) {
+			this.writeByte(CORE_TYPES.Repeat);
+			this._repeat = { count: 0, offset: this.offset };
+		}
+
+		this.offset = this._repeat.offset;
+		this._repeat.count++;
+
+		// console.log('repeat', { value: this.lastWrite, offset: this.offset });
+
+		this.writeLength(this._repeat.count);
 	}
 }

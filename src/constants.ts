@@ -19,5 +19,6 @@ export enum CORE_TYPES {
 	DictValue = 17,
 	DictIndex = 18,
 	String = 19,
+	Repeat = 20,
 	GZIP = 25,
 }

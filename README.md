@@ -76,6 +76,7 @@ console.log(reader.readObject());
 | Double         | 8                  |
 | Map            | 2 + sizeof(object) |
 | String         | 5 + sizeof(object) |
+| Repeat         | 5                  |
 | GZIP           | 5 + sizeof(object) |
 
 ## Stream Example (NodeJs Only)
@@ -112,7 +113,7 @@ import { BinaryWriter, BinaryReader, createExtension } from '@andrew_l/tl-pack';
 const ObjectId = mongoose.Types.ObjectId;
 
 const extensions = [
-  // Reserving token - 100 for ObjectId types
+  // Reserving token for ObjectId type
   createExtension(100, {
     encode(value) {
       if (value?._bsontype === 'ObjectID') {
@@ -129,7 +130,7 @@ const extensions = [
 const writer = new BinaryWriter({ extensions });
 
 writer.writeObject({
-  _id: new Object(),
+  _id: new ObjectId('64a2be105e19f67e19a71a1d'),
   firstName: 'Andrew',
   lastName: 'L.',
 });
