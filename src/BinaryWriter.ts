@@ -272,6 +272,7 @@ export class BinaryWriter {
 		for (const key in object) {
 			if (object[key] === undefined) continue;
 
+			this._last = noop;
 			this.wireDictionary(key);
 			this.writeObject(object[key]);
 		}
@@ -476,8 +477,6 @@ export class BinaryWriter {
 
 		this.offset = this._repeat.offset;
 		this._repeat.count++;
-
-		// console.log('repeat', { value: this.lastWrite, offset: this.offset });
 
 		this.writeLength(this._repeat.count);
 	}
