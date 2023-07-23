@@ -324,25 +324,28 @@ export class BinaryWriter {
 	}
 
 	private _writeCustom(value: any) {
+		const start = this.offset;
+
+		this.allocate(1);
+
+		this.offset++;
+
 		for (const ext of this.extensions.values()) {
-			const result = ext.encode(value);
+			ext.encode.call(this, value);
 
-			if (result !== undefined) {
-				const constructorId = coreType(result);
+			const processed = start < this.offset;
 
-				if (constructorId === CORE_TYPES.None) {
-					throw new TypeError(`Invalid encode extension = ${ext.token} type of ${value}`);
-				}
-
-				if (ext.token !== -1) {
-					this.writeByte(ext.token);
-				}
-
-				this.writeCore(constructorId, result);
+			if (processed) {
+				const end = this.offset;
+				this.offset = start;
+				this.writeByte(ext.token);
+				this.offset = end;
 
 				return true;
 			}
 		}
+
+		this.offset = start;
 
 		return false;
 	}

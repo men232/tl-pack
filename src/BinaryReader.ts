@@ -279,8 +279,7 @@ export class BinaryReader {
 		let value: any;
 
 		if (ext) {
-			value = this.readObject();
-			value = ext.decode(value);
+			value = ext.decode.call(this);
 		} else {
 			value = this._lastObject = this.readCore(constructorId);
 		}
@@ -472,8 +471,7 @@ export class BinaryReader {
 			let value: any;
 
 			if (ext) {
-				value = this.readObject();
-				value = ext.decode(value);
+				value = ext.decode.call(this);
 			} else {
 				value = this.readCore(constructorId);
 			}

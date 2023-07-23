@@ -1,8 +1,11 @@
+import type { BinaryReader } from './BinaryReader.js';
+import type { BinaryWriter } from './BinaryWriter.js';
+
 type Primitives = string | number | boolean;
 
-export type EncodeHandler = (value: any) => string | number | undefined;
+export type EncodeHandler = (this: BinaryWriter, value: any) => void;
 
-export type DecodeHandler = (value: string | number) => any;
+export type DecodeHandler = (this: BinaryReader) => any;
 
 export interface TLExtension {
 	token: number;
