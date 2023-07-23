@@ -113,27 +113,27 @@ import { BinaryWriter, BinaryReader, createExtension } from '@andrew_l/tl-pack';
 const ObjectId = mongoose.Types.ObjectId;
 
 const extensions = [
-	// Reserve token for ObjectId type
-	createExtension(100, {
-		encode(value) {
-			if (value instanceof ObjectId) {
-				this.writeBytes(value.id);
-			}
-		},
-		// in the browser you possibly need to decode as a plain string
-		decode() {
-			const bytes = this.readBytes();
-			return new ObjectId(bytes);
-		},
-	}),
+  // Reserve token for ObjectId type
+  createExtension(100, {
+    encode(value) {
+      if (value instanceof ObjectId) {
+        this.writeBytes(value.id);
+      }
+    },
+    // in the browser you possibly need to decode as a plain string
+    decode() {
+      const bytes = this.readBytes();
+      return new ObjectId(bytes);
+    },
+  }),
 ];
 
 const writer = new BinaryWriter({ extensions });
 
 writer.writeObject({
-	_id: new ObjectId('64a2be105e19f67e19a71a1d'),
-	firstName: 'Andrew',
-	lastName: 'L.',
+  _id: new ObjectId('64a2be105e19f67e19a71a1d'),
+  firstName: 'Andrew',
+  lastName: 'L.',
 });
 
 const reader = new BinaryReader(writer.getBuffer(), { extensions });
