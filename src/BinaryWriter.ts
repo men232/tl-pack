@@ -330,7 +330,14 @@ export class BinaryWriter {
 
 		this.offset++;
 
+		let edgeExt;
+
 		for (const ext of this.extensions.values()) {
+			if (ext.token === -1) {
+				edgeExt = ext;
+				continue;
+			}
+
 			ext.encode.call(this, value);
 
 			const processed = start < this.offset;
@@ -346,6 +353,11 @@ export class BinaryWriter {
 		}
 
 		this.offset = start;
+
+		if (edgeExt) {
+			edgeExt.encode.call(this, value);
+			return start < this.offset;
+		}
 
 		return false;
 	}
