@@ -194,7 +194,7 @@ export class BinaryWriter {
 		let timestamp = 0;
 
 		if (value instanceof Date) {
-			timestamp = Math.floor(value.getTime() / 1000);
+			timestamp = value.getTime();
 		} else if (typeof value === 'number') {
 			timestamp = value;
 		}

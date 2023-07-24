@@ -257,7 +257,7 @@ export class BinaryReader {
 	readDate() {
 		const value = this.readDouble();
 
-		return new Date(value * 1000);
+		return new Date(value);
 	}
 
 	/**
