@@ -326,7 +326,7 @@ export class BinaryWriter {
 
 			ext.encode.call(this, value);
 
-			const processed = start < this.offset;
+			const processed = start + 1 < this.offset;
 
 			if (processed) {
 				const end = this.offset;
