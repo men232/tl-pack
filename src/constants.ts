@@ -22,3 +22,7 @@ export enum CORE_TYPES {
 	Repeat = 20,
 	GZIP = 25,
 }
+
+export const HAS_NODE_BUFFER = typeof Buffer !== 'undefined';
+
+export const MAX_BUFFER_SIZE = HAS_NODE_BUFFER ? 0x100000000 : 0x7fd00000;

@@ -1,34 +1,18 @@
 import pako from 'pako';
-import { CORE_TYPES } from './constants.js';
+import { CORE_TYPES, MAX_BUFFER_SIZE } from './constants.js';
 import { Dictionary } from './dictionary.js';
 import { TLExtension } from './extension.js';
-import { coreType, float32, float64, int32 } from './helpers.js';
-
-const hasNodeBuffer = typeof Buffer !== 'undefined';
-
-const MAX_BUFFER_SIZE = hasNodeBuffer ? 0x100000000 : 0x7fd00000;
-
-const textEncoder = new TextEncoder();
+import {
+	byteArrayAllocate,
+	coreType,
+	float32,
+	float64,
+	int32,
+	utf8Write,
+	utf8WriteShort,
+} from './helpers.js';
 
 const noop = Symbol();
-
-const writeUtf8 = hasNodeBuffer
-	? function (target: any, value: string, offset: number) {
-			const length = target.utf8Write(value, offset, 0xffffffff) as number;
-
-			return length;
-	  }
-	: function (target: any, value: string, offset: number) {
-			return textEncoder.encodeInto(value, target.subarray(offset)).written;
-	  };
-
-function byteArrayAllocate(length: number) {
-	if (hasNodeBuffer) {
-		return Buffer.allocUnsafeSlow(length);
-	}
-
-	return new Uint8Array(length);
-}
 
 export interface BinaryWriterOptions {
 	gzip?: boolean;
@@ -104,7 +88,6 @@ export class BinaryWriter {
 		}
 
 		const newBuffer = byteArrayAllocate(newSize);
-		const newView = new DataView(newBuffer.buffer, 0, newSize);
 
 		end = Math.min(end, target.length);
 
@@ -206,8 +189,10 @@ export class BinaryWriter {
 		// const compressed = pako.deflateRaw(value, { level: 9 });
 		// this.writeBytes(compressed);
 
+		const strLength = value.length;
+
 		let start = this.offset;
-		let require = value.length << 2;
+		let require = strLength << 2;
 
 		if (require < 254) {
 			require += 1;
@@ -218,7 +203,8 @@ export class BinaryWriter {
 		}
 
 		this.allocate(require);
-		const bytes = writeUtf8(this.target, value, this.offset);
+
+		const bytes = utf8Write(this.target, value, this.offset);
 
 		if (require < 254) {
 			this.target[start++] = bytes;
@@ -471,6 +457,12 @@ export class BinaryWriter {
 			}
 
 			case CORE_TYPES.String: {
+				// write short strings into dictionary
+				if (value.length <= 0x10) {
+					this.offset--;
+					return this.wireDictionary(value);
+				}
+
 				return this.writeString(value);
 			}
 

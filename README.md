@@ -120,9 +120,13 @@ const extensions = [
         this.writeBytes(value.id);
       }
     },
-    // in the browser you possibly need to decode as a plain string
     decode() {
       const bytes = this.readBytes();
+
+      if (IS_BROWSER) {
+        return hex(bytes);
+      }
+
       return new ObjectId(bytes);
     },
   }),
@@ -146,6 +150,24 @@ console.log(reader.readObject());
   lastName: 'L.'
 }
  */
+
+const byteToHex: string[] = [];
+
+for (let n = 0; n <= 0xff; ++n) {
+  const hexOctet = n.toString(16).padStart(2, '0');
+  byteToHex.push(hexOctet);
+}
+
+function hex(arrayBuffer: Uint8Array) {
+  const buff = new Uint8Array(arrayBuffer);
+  const hexOctets = new Array(buff.length);
+
+  for (let i = 0; i < buff.length; ++i) {
+    hexOctets[i] = byteToHex[buff[i]];
+  }
+
+  return hexOctets.join('');
+}
 ```
 
 ## Dictionary

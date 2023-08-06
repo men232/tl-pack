@@ -2,7 +2,7 @@ import pako from 'pako';
 import { CORE_TYPES } from './constants.js';
 import { Dictionary } from './dictionary.js';
 import { TLExtension } from './extension.js';
-import { bytesToUtf8, float32, float64, int32 } from './helpers.js';
+import { float32, float64, int32, utf8Read } from './helpers.js';
 
 export interface BinaryReaderOptions {
 	dictionary?: string[] | Dictionary;
@@ -220,13 +220,9 @@ export class BinaryReader {
 
 		this.assertRead(length);
 
-		const bytes = this.target.subarray(this.offset, this.offset + length);
+		const result = utf8Read(this.target, length, this.offset);
 
-		this.offset += bytes.length;
-
-		// return pako.inflateRaw(bytes, { to: 'string' });
-
-		const result = bytesToUtf8(bytes);
+		this.offset += length;
 
 		this._last = result;
 
@@ -342,6 +338,15 @@ export class BinaryReader {
 				return this.readDouble();
 			case CORE_TYPES.Map:
 				return this.readMap(false);
+			case CORE_TYPES.DictIndex: {
+				const idx = this.readLength();
+				return this.getDictionaryValue(idx)!;
+			}
+			case CORE_TYPES.DictValue: {
+				const value = this.readString();
+				this.dictionaryExtended.maybeInsert(value);
+				return value;
+			}
 			case CORE_TYPES.Repeat: {
 				const size = this.readLength();
 				this._repeat = { pool: size - 1, value: this._lastObject };
@@ -370,7 +375,7 @@ export class BinaryReader {
 		return value;
 	}
 
-	readDictionary() {
+	readDictionary(): null | string {
 		const constructorId = this.readByte();
 
 		let key = null;
