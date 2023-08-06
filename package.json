@@ -1,6 +1,6 @@
 {
 	"name": "@andrew_l/tl-pack",
-	"version": "0.1.81",
+	"version": "0.1.82",
   "description": "Binary serialization library",
 	"type": "module",
 	"scripts": {
